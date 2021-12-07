@@ -27,13 +27,14 @@ public class ConfluenceSpaceArchiver {
 	// 地址常量
 	public String ROOT_LOCAL_PATH = "/Users/mmao/mmVolume/Documents/work-长亮科技/DEP-解决方案&产品管理部/UUU-知识库Confluence";
 	public String ROOT_CONFLUENCE;
-	public String PAGES_VIEWPAGE_ACTION_PAGE_ID = "/pages/viewpage.action?pageId=";
-	public String PAGES_VIEWINFO_ACTION_PAGE_ID = "/pages/viewinfo.action?pageId=";
-	public String PAGES_VIEWATTACHMENT_ACTION_PAGE_ID = "/pages/viewpageattachments.action?pageId=";
-	public String VIEW_PAGE = ROOT_CONFLUENCE + PAGES_VIEWPAGE_ACTION_PAGE_ID;
-	public String VIEW_INFO = ROOT_CONFLUENCE + PAGES_VIEWINFO_ACTION_PAGE_ID;
-	public String VIEW_ATTACHMENT = ROOT_CONFLUENCE + PAGES_VIEWATTACHMENT_ACTION_PAGE_ID;
-	public String VIEW_SPACE_LIST = ROOT_CONFLUENCE + "/spacedirectory/view.action?os_username=" + this.username + "&os_password=" + this.password + "&login=%E7%99%BB%E5%BD%95&os_destination=";
+	public static final String PAGES_VIEWPAGE_ACTION_PAGE_ID = "/pages/viewpage.action?pageId=";
+	public static final String PAGES_VIEWINFO_ACTION_PAGE_ID = "/pages/viewinfo.action?pageId=";
+	public static final String PAGES_VIEWATTACHMENT_ACTION_PAGE_ID = "/pages/viewpageattachments.action?pageId=";
+	private static final String SPACES_SEARCH_ACTION = "/rest/spacedirectory/1/search?query=&type=global&status=current&pageSize=1&startIndex=0";
+	public String VIEW_PAGE;
+	public String VIEW_INFO;
+	public String VIEW_ATTACHMENT;
+	public String VIEW_SPACE_LIST;
 	public String DO_LOGIN_PARAM;
 	// 用户名
 	private String username;
@@ -52,6 +53,11 @@ public class ConfluenceSpaceArchiver {
 		this.username = username;
 		this.password = password;
 		this.ROOT_CONFLUENCE = rootUrl;
+		
+		this.VIEW_PAGE = ROOT_CONFLUENCE + this.PAGES_VIEWPAGE_ACTION_PAGE_ID;
+		this.VIEW_INFO = ROOT_CONFLUENCE + this.PAGES_VIEWINFO_ACTION_PAGE_ID;
+		this.VIEW_ATTACHMENT = ROOT_CONFLUENCE + this.PAGES_VIEWATTACHMENT_ACTION_PAGE_ID;
+		this.VIEW_SPACE_LIST = ROOT_CONFLUENCE + this.SPACES_SEARCH_ACTION;
 		this.DO_LOGIN_PARAM = "/dologin.action?os_username=" + this.username + "&os_password=" + this.password + "&login=%E7%99%BB%E5%BD%95&os_destination=";
 	}
 	
@@ -158,7 +164,11 @@ public class ConfluenceSpaceArchiver {
 			}
 		} else {
 			//初级页面，没有父页面干扰
-			subPages = doc.select("#content .pageInfoTable").get(1).select("A");
+			if (doc.select("#content .pageInfoTable").size() > 0) {
+				subPages = doc.select("#content .pageInfoTable").get(1).select("A");
+			} else {
+				log.error("No pageInfoTabe from page : {} ", this.VIEW_INFO + pageid);
+			}
 		}
 		
 		//解析pageInfoTable - 取所有子页面
@@ -221,7 +231,7 @@ public class ConfluenceSpaceArchiver {
 	 * @param page
 	 */
 	public void recursiveChildrenSubPages(ConfluencePage page) {
-		log.info("Recursive {}" , page);
+		log.info("Recursive {} {} {}", page.getName(), page.getId(), page.getUrl());
 		for (int i = 0; i < page.childrens.size(); i++) {
 			ConfluencePage iPage = page.childrens.get(i);
 			//获取附件列表，注意分页
@@ -511,14 +521,54 @@ public class ConfluenceSpaceArchiver {
 	public List<ConfluencePage> getSpaceList() {
 		List<ConfluencePage> ret = new ArrayList<>();
 		
-		getHtml(this.ROOT_CONFLUENCE , httpclient);
-		Document doc = getHtml(this.VIEW_SPACE_LIST , httpclient);
-		Elements tbsl = doc.select("*.space-list-item");
-		Element spaceSearchResult = doc.select("#space-search-result").first();
-		Elements project = doc.select("*:contains(W-)");
+		//获取spaces总数
+		Document doc = getHtml(this.VIEW_SPACE_LIST, httpclient);
+		int totalSpaces = Integer.parseInt(doc.select("totalsize").first().text());
 		
-		log.info("{}" , doc.html());
+		//循环获取spaces
+		this.VIEW_SPACE_LIST = this.VIEW_SPACE_LIST.replaceAll("pageSize=1", "pageSize=10");
+		String newVIEW_SPACE_LIST = this.VIEW_SPACE_LIST;
+		for (int i = 0; i < totalSpaces / 10 + 1; i++) {
+			this.VIEW_SPACE_LIST = newVIEW_SPACE_LIST.replaceAll("startIndex=0", "startIndex=" + i * 10);
+			Document doc1 = getHtml(this.VIEW_SPACE_LIST, httpclient);
+			Elements spaces = doc1.select("spaces");
+			for (Element space : spaces) {
+				if (space.html().contains("pageId")) {
+					Element alink = space.select("link[rel=alternate]").first();
+					String spacename = space.attr("name");
+					String spaceurl = alink.attr("href");
+					String spaceid = spaceurl.substring(spaceurl.indexOf("pageId=") + 7);
+					
+					ConfluencePage newSpace = new ConfluencePage(spacename, spaceid, spaceurl);
+					ret.add(newSpace);
+					log.debug("Recognized a spaces: {}" + newSpace);
+				} else {
+					log.debug("Not a space:{}", space.attr("name"));
+				}
+			}
+		}
 		
 		return ret;
+	}
+	
+	/**
+	 * 将空间列表保存成索引文件，作为入口
+	 *
+	 * @param confluencePageTree
+	 */
+	public void saveIndex(ConfluencePage confluencePageTree) {
+		String content = "";
+		content += "<html>\r\n";
+		for (ConfluencePage aspace : confluencePageTree.getChildrens()) {
+			content += "<a href=\"page-" + aspace.getId() + "/index.html\">" + aspace.getName() + "</a>\r\n";
+			content += "<br/>\r\n";
+		}
+		content += "</html>\r\n";
+		
+		try {
+			FileUtils.writeStringToFile(new File(this.ROOT_LOCAL_PATH + File.separator + "index.html"), content, "utf8");
+		} catch (IOException e) {
+			log.error("IOException when write spacelist", e);
+		}
 	}
 }
