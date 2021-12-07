@@ -26,7 +26,7 @@ import java.util.Map;
 public class ConfluenceSpaceArchiver {
 	// 地址常量
 	public String ROOT_LOCAL_PATH = "/Users/mmao/mmVolume/Documents/work-长亮科技/DEP-解决方案&产品管理部/UUU-知识库Confluence";
-	public String ROOT_CONFLUENCE = "http://e-proxy.yfb.sunline.cn:8090";
+	public String ROOT_CONFLUENCE;
 	public String PAGES_VIEWPAGE_ACTION_PAGE_ID = "/pages/viewpage.action?pageId=";
 	public String PAGES_VIEWINFO_ACTION_PAGE_ID = "/pages/viewinfo.action?pageId=";
 	public String PAGES_VIEWATTACHMENT_ACTION_PAGE_ID = "/pages/viewpageattachments.action?pageId=";
