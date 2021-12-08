@@ -38,12 +38,12 @@ public class ConfluenceSpaceArchiver {
 	public String VIEW_SPACE_LIST;
 	public String DO_LOGIN_PARAM;
 	// 用户名
-	private String username;
-	private String password;
+	private final String username;
+	private final String password;
 	// 其他
-	private ThreadLocal<String> tlSessionCookie = new ThreadLocal<>();
-	private CloseableHttpClient httpclient = HttpClients.createDefault();
-	private ArrayList<String> uniPageIdQueue = new ArrayList<>();
+	private final ThreadLocal<String> tlSessionCookie = new ThreadLocal<>();
+	private final CloseableHttpClient httpclient = HttpClients.createDefault();
+	private final ArrayList<String> uniPageIdQueue = new ArrayList<>();
 	
 	/**
 	 * 空间的用户名、密码、根URL
@@ -51,15 +51,15 @@ public class ConfluenceSpaceArchiver {
 	 * @param username
 	 * @param password
 	 */
-	public ConfluenceSpaceArchiver(String username , String password , String rootUrl) {
+	public ConfluenceSpaceArchiver(String username, String password, String rootUrl) {
 		this.username = username;
 		this.password = password;
 		this.ROOT_CONFLUENCE = rootUrl;
 		
-		this.VIEW_PAGE = ROOT_CONFLUENCE + this.PAGES_VIEWPAGE_ACTION_PAGE_ID;
-		this.VIEW_INFO = ROOT_CONFLUENCE + this.PAGES_VIEWINFO_ACTION_PAGE_ID;
-		this.VIEW_ATTACHMENT = ROOT_CONFLUENCE + this.PAGES_VIEWATTACHMENT_ACTION_PAGE_ID;
-		this.VIEW_SPACE_LIST = ROOT_CONFLUENCE + this.SPACES_SEARCH_ACTION;
+		this.VIEW_PAGE = ROOT_CONFLUENCE + PAGES_VIEWPAGE_ACTION_PAGE_ID;
+		this.VIEW_INFO = ROOT_CONFLUENCE + PAGES_VIEWINFO_ACTION_PAGE_ID;
+		this.VIEW_ATTACHMENT = ROOT_CONFLUENCE + PAGES_VIEWATTACHMENT_ACTION_PAGE_ID;
+		this.VIEW_SPACE_LIST = ROOT_CONFLUENCE + SPACES_SEARCH_ACTION;
 		this.DO_LOGIN_PARAM = "/dologin.action?os_username=" + this.username + "&os_password=" + this.password + "&login=%E7%99%BB%E5%BD%95&os_destination=";
 	}
 	
@@ -419,13 +419,13 @@ public class ConfluenceSpaceArchiver {
 		Element pagetree = doc.select("div.plugin_pagetree").first();
 		try {
 			pagetree.children().remove();
+			if (page.getParentID() != null) {
+				pagetree.append("<a href='../page-" + page.getParentID() + "/index.html'>返回上级页面</a><br/>");
+			}
+			for (ConfluencePage children : page.getChildrens()) {
+				pagetree.append("<a href='../page-" + children.getId() + "/index.html'>" + children.getName() + "</a><br/>");
+			}
 		} catch (Exception e) {
-		}
-		if (page.getParentID() != null) {
-			pagetree.append("<a href='../page-" + page.getParentID() + "/index.html'>返回上级页面</a><br/>");
-		}
-		for (ConfluencePage children : page.getChildrens()) {
-			pagetree.append("<a href='../page-" + children.getId() + "/index.html'>" + children.getName() + "</a><br/>");
 		}
 		
 		//调整A标签，重定向pagid的目录
