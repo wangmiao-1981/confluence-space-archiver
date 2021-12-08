@@ -565,19 +565,19 @@ public class ConfluenceSpaceArchiver {
 	/**
 	 * 将空间列表保存成索引文件，作为入口
 	 *
-	 * @param confluencePageTree
+	 * @param page
 	 */
-	public void saveIndex(ConfluencePage confluencePageTree) {
+	public void saveIndex(String filename, ConfluencePage page) {
 		String content = "";
 		content += "<html>\r\n";
-		for (ConfluencePage aspace : confluencePageTree.getChildrens()) {
+		for (ConfluencePage aspace : page.getChildrens()) {
 			content += "<a href=\"page-" + aspace.getId() + "/index.html\">" + aspace.getName() + "</a>\r\n";
 			content += "<br/>\r\n";
 		}
 		content += "</html>\r\n";
 		
 		try {
-			FileUtils.writeStringToFile(new File(this.ROOT_LOCAL_PATH + File.separator + "index.html"), content, "utf8");
+			FileUtils.writeStringToFile(new File(filename), content, "utf8");
 		} catch (IOException e) {
 			log.error("IOException when write spacelist", e);
 		}
