@@ -1,4 +1,4 @@
-package cn.sunline.wells.toys;
+package cn.sunline.wells.toys.csa.stv;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
@@ -14,6 +14,7 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.springframework.util.SerializationUtils;
 import org.springframework.util.StreamUtils;
 
 import java.io.*;
@@ -42,6 +43,7 @@ public class ConfluenceSpaceArchiver {
 	// 其他
 	private ThreadLocal<String> tlSessionCookie = new ThreadLocal<>();
 	private CloseableHttpClient httpclient = HttpClients.createDefault();
+	private ArrayList<String> uniPageIdQueue = new ArrayList<>();
 	
 	/**
 	 * 空间的用户名、密码、根URL
@@ -164,7 +166,7 @@ public class ConfluenceSpaceArchiver {
 			}
 		} else {
 			//初级页面，没有父页面干扰
-			if (doc.select("#content .pageInfoTable").size() > 0) {
+			if (doc.select("#content .pageInfoTable").size() >= 2) {
 				subPages = doc.select("#content .pageInfoTable").get(1).select("A");
 			} else {
 				log.error("No pageInfoTabe from page : {} ", this.VIEW_INFO + pageid);
@@ -232,15 +234,24 @@ public class ConfluenceSpaceArchiver {
 	 */
 	public void recursiveChildrenSubPages(ConfluencePage page) {
 		log.info("Recursive {} {} {}", page.getName(), page.getId(), page.getUrl());
+		//防重、防回环检查
+		if (uniPageIdQueue.contains(page.getId())) {
+			log.info("Duplicated pageid found : {}", page.getId());
+			return;
+		}
+		uniPageIdQueue.add(page.getId());
+		
+		//对该页下的children进行分析，找出下一级子页面
 		for (int i = 0; i < page.childrens.size(); i++) {
 			ConfluencePage iPage = page.childrens.get(i);
+			
 			//获取附件列表，注意分页
 			List<String[]> attachments = getAttachments(iPage.getId());
 			if (attachments.size() > 0) {
-				log.info("Got attachments cnt:{} from pageid:{}" , attachments.size() , iPage.getId());
+				log.info("Got attachments cnt:{} from pageid:{}", attachments.size(), iPage.getId());
 				iPage.getAttachments().addAll(attachments);
 				for (String[] attachment : attachments) {
-					log.debug("attachment:{} from pageid:{}" , attachment , iPage.getId());
+					log.debug("attachment:{} from pageid:{}", attachment, iPage.getId());
 				}
 			}
 			
@@ -569,6 +580,41 @@ public class ConfluenceSpaceArchiver {
 			FileUtils.writeStringToFile(new File(this.ROOT_LOCAL_PATH + File.separator + "index.html"), content, "utf8");
 		} catch (IOException e) {
 			log.error("IOException when write spacelist", e);
+		}
+	}
+	
+	/**
+	 * 从文件反序列化对象
+	 *
+	 * @param filename
+	 * @return
+	 */
+	public ConfluencePage checkpointLoad(String filename) {
+		File checkpoint = new File(filename);
+		if (checkpoint.exists()) {
+			try {
+				byte[] dataCheckpoint = FileUtils.readFileToByteArray(checkpoint);
+				ConfluencePage confluencePageTree = (ConfluencePage) SerializationUtils.deserialize(dataCheckpoint);
+				return confluencePageTree;
+			} catch (IOException e) {
+				log.error("Read checkpoint error {}", e);
+			}
+		}
+		return null;
+	}
+	
+	/**
+	 * 将对象序列化到文件
+	 *
+	 * @param filename
+	 * @param confluencePageTree
+	 */
+	public void checkpointSave(String filename, ConfluencePage confluencePageTree) {
+		try {
+			byte[] dataCheckpoint = SerializationUtils.serialize(confluencePageTree);
+			FileUtils.writeByteArrayToFile(new File(filename), dataCheckpoint);
+		} catch (IOException e) {
+			log.error("Write checkpoint error {}", e);
 		}
 	}
 }

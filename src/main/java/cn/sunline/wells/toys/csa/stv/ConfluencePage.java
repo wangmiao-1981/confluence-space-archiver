@@ -1,4 +1,4 @@
-package cn.sunline.wells.toys;
+package cn.sunline.wells.toys.csa.stv;
 
 import lombok.Data;
 
@@ -19,6 +19,8 @@ public class ConfluencePage {
 	String id;
 	//页面完整url
 	String url;
+	//状态,
+	boolean extended;
 	//父页面id
 	String parentID;
 	//子页面
