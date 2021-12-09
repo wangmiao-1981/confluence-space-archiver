@@ -14,7 +14,6 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-import org.springframework.util.SerializationUtils;
 import org.springframework.util.StreamUtils;
 
 import java.io.*;
@@ -343,6 +342,23 @@ public class ConfluenceSpaceArchiver {
 	}
 	
 	/**
+	 * 构建树型的列表
+	 *
+	 * @param confluencePageTree
+	 * @return
+	 */
+	private List<String[]> recursiveTree2Menu(ConfluencePage confluencePageTree, String head) {
+		List<String[]> ret = new ArrayList<>();
+		if (confluencePageTree.getChildrens().size() > 0) {
+			for (ConfluencePage children : confluencePageTree.getChildrens()) {
+				ret.add(new String[]{head + children.getName(), children.getId()});
+				ret.addAll(recursiveTree2Menu(children, "&nbsp&nbsp&nbsp&nbsp" + head));
+			}
+		}
+		return ret;
+	}
+	
+	/**
 	 * 下载页面
 	 * TODO:将页面中的链接替换过程、附件下载方法提取出来
 	 *
@@ -353,7 +369,7 @@ public class ConfluenceSpaceArchiver {
 		FileUtils.forceMkdir(new File(this.ROOT_LOCAL_PATH + "/page-" + page.getId()));
 		
 		//获取页面
-		Document doc = getHtml(page.getUrl() , httpclient);
+		Document doc = getHtml(page.getUrl(), httpclient);
 		
 		//下载页面中的css、js、image，并调整doc中的href
 		String postfix = "";// 文件后缀名作为文件前缀
@@ -416,15 +432,17 @@ public class ConfluenceSpaceArchiver {
 		}
 		
 		//替换目录：父页面、子页面
+		List<String[]> newPageTree = recursiveTree2Menu(page, " ");
 		Element pagetree = doc.select("div.plugin_pagetree").first();
 		try {
 			pagetree.children().remove();
 			if (page.getParentID() != null) {
 				pagetree.append("<a href='../page-" + page.getParentID() + "/index.html'>返回上级页面</a><br/>");
 			}
-			for (ConfluencePage children : page.getChildrens()) {
-				pagetree.append("<a href='../page-" + children.getId() + "/index.html'>" + children.getName() + "</a><br/>");
+			for (String[] pagecon : newPageTree) {
+				pagetree.append("<a href='../page-" + pagecon[1] + "/index.html'>" + pagecon[0] + "</a><br/>");
 			}
+
 		} catch (Exception e) {
 		}
 		
@@ -563,58 +581,22 @@ public class ConfluenceSpaceArchiver {
 	}
 	
 	/**
-	 * 将空间列表保存成索引文件，作为入口
+	 * 将空间列表保存到索引文件，作为入口
 	 *
 	 * @param page
 	 */
 	public void saveIndex(String filename, ConfluencePage page) {
 		String content = "";
-		content += "<html>\r\n";
 		for (ConfluencePage aspace : page.getChildrens()) {
 			content += "<a href=\"page-" + aspace.getId() + "/index.html\">" + aspace.getName() + "</a>\r\n";
 			content += "<br/>\r\n";
 		}
-		content += "</html>\r\n";
 		
 		try {
-			FileUtils.writeStringToFile(new File(filename), content, "utf8");
+			FileUtils.writeStringToFile(new File(filename), content, "utf8", true);
 		} catch (IOException e) {
 			log.error("IOException when write spacelist", e);
 		}
 	}
 	
-	/**
-	 * 从文件反序列化对象
-	 *
-	 * @param filename
-	 * @return
-	 */
-	public ConfluencePage checkpointLoad(String filename) {
-		File checkpoint = new File(filename);
-		if (checkpoint.exists()) {
-			try {
-				byte[] dataCheckpoint = FileUtils.readFileToByteArray(checkpoint);
-				ConfluencePage confluencePageTree = (ConfluencePage) SerializationUtils.deserialize(dataCheckpoint);
-				return confluencePageTree;
-			} catch (IOException e) {
-				log.error("Read checkpoint error {}", e);
-			}
-		}
-		return null;
-	}
-	
-	/**
-	 * 将对象序列化到文件
-	 *
-	 * @param filename
-	 * @param confluencePageTree
-	 */
-	public void checkpointSave(String filename, ConfluencePage confluencePageTree) {
-		try {
-			byte[] dataCheckpoint = SerializationUtils.serialize(confluencePageTree);
-			FileUtils.writeByteArrayToFile(new File(filename), dataCheckpoint);
-		} catch (IOException e) {
-			log.error("Write checkpoint error {}", e);
-		}
-	}
 }
