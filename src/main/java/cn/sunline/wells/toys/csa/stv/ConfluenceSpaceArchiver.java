@@ -97,7 +97,7 @@ public class ConfluenceSpaceArchiver {
 		}
 		//设置超时控制相关时间参数
 		httpget.setConfig(RequestConfig.custom() //
-				.setConnectionRequestTimeout(10000) //
+				.setConnectionRequestTimeout(50000) //
 				.setConnectTimeout(10000) //
 				.setSocketTimeout(10000) //
 				.build());
@@ -508,24 +508,22 @@ public class ConfluenceSpaceArchiver {
 		try {
 			FileUtils.forceMkdir(desc.getParentFile());
 			
+			log.info("File downloading：" + url);
 			HttpGet httpget = getHttpGet(url);
 			try (CloseableHttpResponse response = httpclient.execute(httpget)) {
 				HttpEntity entity = response.getEntity();
 				try (InputStream is = entity.getContent(); //
 				     OutputStream os = new FileOutputStream(desc)) {
-					StreamUtils.copy(is , os);
+					StreamUtils.copy(is, os);
 					log.info("File downloaded：" + url);
 				} catch (Throwable e) {
-					log.error("File download fail：" + url);
-					e.printStackTrace();
+					log.error("File download fail：{} {}", url, e);
 				}
 			} catch (Throwable e) {
-				log.error("File download fail：" + url);
-				e.printStackTrace();
+				log.error("File download fail：{} {}", url, e);
 			}
-		} catch (IOException e) {
-			log.error("File download fail：" + url);
-			e.printStackTrace();
+		} catch (Exception e) {
+			log.error("File download fail：{} {}", url, e);
 		}
 	}
 	

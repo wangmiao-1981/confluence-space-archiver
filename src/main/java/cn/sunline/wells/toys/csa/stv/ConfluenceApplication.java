@@ -31,7 +31,9 @@ public class ConfluenceApplication {
 			String content = FileUtils.readFileToString(checkpoint, "utf8");
 			String[] ids = content.split(",");
 			continueSpaceid = ids[0];
-			continuePageid = ids[1];
+			if (ids.length > 1) {
+				continuePageid = ids[1];
+			}
 		}
 		
 		//登录Confluence
@@ -45,13 +47,17 @@ public class ConfluenceApplication {
 		
 		//以空间为单位组织下载过程（其实可以一次下载多个空间，因为单线程版本太慢了，容易超时，所以改成以空间为单位，每个空间new archiver使用独立的连接)
 		boolean skipSpace = true;
+		boolean skipPage = true;
 		if (continueSpaceid == null) {
 			skipSpace = false;
+		}
+		if (continuePageid == null) {
+			skipPage = false;
 		}
 		int i = 1;
 		for (ConfluencePage ispace : spacelist) {
 			log.info("----------------------------------------------------------------------");
-			log.info("Download space: {} {}/{}", ispace.name, i, total);
+			log.info("Download space: {} {} {}/{}", ispace.getName(), ispace.getId(), i, total);
 			i++;
 			
 			//断点续爬，颗粒度：空间
@@ -75,24 +81,30 @@ public class ConfluenceApplication {
 			
 			//整理页面下载队列
 			List<ConfluencePage> confluencePages = confluenceSpaceArchiver.recursiveTree2Queue(confluencePageTree);
+			log.info("Total pages: {}", confluencePages.size());
 			
 			//下载页面内容，保存到本地目录
-			boolean skipPage = true;
-			if (continuePageid == null) {
-				skipPage = false;
-			}
 			for (ConfluencePage ipage : confluencePages) {
 				//断点续爬，颗粒度：页面
-				if (ipage.getId().equals(continuePageid)) {
-					//最后一个页面会重爬
-					skipPage = false;
-				}
 				if (skipPage) {
+					if (ipage.getId().equals(continuePageid)) {
+						skipPage = false;
+					}
+					log.info("Skipping page {} {} {}", ipage.getName(), ipage.getId(), ipage.getUrl());
 					continue;
 				}
 				
+				//查缺补漏专用，发现有的页面没下载，可能是迭代过程中出的花样，回头重下一遍验证看看
+				if (true) {
+					File pageIndex = new File(confluenceSpaceArchiver.ROOT_LOCAL_PATH + File.separator + "page-" + ipage.getId() + File.separator + "index.html");
+					if (pageIndex.exists()) {
+						log.info("Skipping page {} {} {}", ipage.getName(), ipage.getId(), ipage.getUrl());
+						continue;
+					}
+				}
+				
 				//下载页面
-				log.info("Archiving {}", ipage);
+				log.info("Archiving {} {} {}", ipage.getName(), ipage.getId(), ipage.getUrl());
 				confluenceSpaceArchiver.downloadPageHtml(ipage);
 				confluenceSpaceArchiver.downloadPageAttachment(ipage);
 				
