@@ -22,8 +22,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 单线程版本
+ */
 @Slf4j
-public class ConfluenceSpaceArchiver {
+public class ConfluenceSpaceArchiverST {
 	// 地址常量
 	public String ROOT_LOCAL_PATH = "/Users/mmao/mmVolume/Documents/work-长亮科技/DEP-解决方案&产品管理部/UUU-知识库Confluence";
 	public String ROOT_CONFLUENCE;
@@ -50,7 +53,7 @@ public class ConfluenceSpaceArchiver {
 	 * @param username
 	 * @param password
 	 */
-	public ConfluenceSpaceArchiver(String username, String password, String rootUrl) {
+	public ConfluenceSpaceArchiverST(String username, String password, String rootUrl) {
 		this.username = username;
 		this.password = password;
 		this.ROOT_CONFLUENCE = rootUrl;
