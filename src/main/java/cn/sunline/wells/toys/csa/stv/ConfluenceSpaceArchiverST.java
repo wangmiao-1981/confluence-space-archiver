@@ -524,18 +524,23 @@ public class ConfluenceSpaceArchiverST {
 				
 				Elements spaces = doc1.select("spaces");
 				for (Element space : spaces) {
-					if (space.html().contains("pageId")) {
-						Element alink = space.select("link[rel=alternate]").first();
-						String spacename = space.attr("name");
-						String spaceurl = alink.attr("href");
-						String spaceid = spaceurl.substring(spaceurl.indexOf("pageId=") + 7);
-						
-						ConfluencePageST newSpace = new ConfluencePageST(spacename, spaceid, spaceurl);
-						ret.add(newSpace);
-						log.debug("Recognized a spaces: {}", newSpace);
-					} else {
-						log.debug("Not a space:{}", space.attr("name"));
+					Element alink = space.select("link[rel=alternate]").first();
+					String spacename = space.attr("name");
+					String spaceurl = alink.attr("href");
+					String spaceid = spaceurl.substring(spaceurl.indexOf("pageId=") + 7);
+					
+					if (spaceurl.contains("/display/")) {
+						try {
+							spaceurl = Jsoup.connect(spaceurl).cookies(this.sessionCookies.get()).execute().parse().select("A#view-page-info-link").attr("href");
+						} catch (IOException e) {
+							log.error("Jsoup connect {} error \n {}", spaceurl, e);
+						}
+						spaceid = spaceurl.substring(spaceurl.indexOf("pageId") + 7);
 					}
+					
+					ConfluencePageST newSpace = new ConfluencePageST(spacename, spaceid, spaceurl);
+					ret.add(newSpace);
+					log.debug("Recognized a spaces: {}", newSpace);
 				}
 			}
 		} catch (IOException e) {
