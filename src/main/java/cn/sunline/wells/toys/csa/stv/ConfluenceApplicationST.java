@@ -14,8 +14,8 @@ import java.util.List;
  * @author wangmiao
  * @date 2021-12-3
  */
-public class ConfluenceApplication {
-	private static final Logger log = LoggerFactory.getLogger(ConfluenceApplication.class);
+public class ConfluenceApplicationST {
+	private static final Logger log = LoggerFactory.getLogger(ConfluenceApplicationST.class);
 	
 	public static void main(String[] args) throws IOException {
 		String username = "wangmiao";
@@ -37,11 +37,11 @@ public class ConfluenceApplication {
 		}
 		
 		//登录Confluence
-		ConfluenceSpaceArchiver csaSpaces = new ConfluenceSpaceArchiver(username, passwd, confluenceurl);
+		ConfluenceSpaceArchiverST csaSpaces = new ConfluenceSpaceArchiverST(username, passwd, confluenceurl);
 		csaSpaces.login();
 		
 		//从空间列表页面获构建根
-		List<ConfluencePage> spacelist = csaSpaces.getSpaceList();
+		List<ConfluencePageST> spacelist = csaSpaces.getSpaceList();
 		log.info("Total spaces: {}", spacelist.size());
 		int total = spacelist.size();
 		
@@ -55,7 +55,7 @@ public class ConfluenceApplication {
 			skipPage = false;
 		}
 		int i = 1;
-		for (ConfluencePage ispace : spacelist) {
+		for (ConfluencePageST ispace : spacelist) {
 			log.info("----------------------------------------------------------------------");
 			log.info("Download space: {} {} {}/{}", ispace.getName(), ispace.getId(), i, total);
 			i++;
@@ -69,22 +69,22 @@ public class ConfluenceApplication {
 			}
 			
 			//登录Confluence
-			ConfluenceSpaceArchiver confluenceSpaceArchiver = new ConfluenceSpaceArchiver(username, passwd, confluenceurl);
+			ConfluenceSpaceArchiverST confluenceSpaceArchiver = new ConfluenceSpaceArchiverST(username, passwd, confluenceurl);
 			confluenceSpaceArchiver.login();
 			
 			//待下载的树结构
-			ConfluencePage confluencePageTree = new ConfluencePage("根", "0", "");
+			ConfluencePageST confluencePageTree = new ConfluencePageST("根", "0", "");
 			confluencePageTree.getChildrens().add(ispace);
 			
 			//递归获取页面树结构
 			confluenceSpaceArchiver.recursiveChildrenSubPages(confluencePageTree);
 			
 			//整理页面下载队列
-			List<ConfluencePage> confluencePages = confluenceSpaceArchiver.recursiveTree2Queue(confluencePageTree);
+			List<ConfluencePageST> confluencePages = confluenceSpaceArchiver.recursiveTree2Queue(confluencePageTree);
 			log.info("Total pages: {}", confluencePages.size());
 			
 			//下载页面内容，保存到本地目录
-			for (ConfluencePage ipage : confluencePages) {
+			for (ConfluencePageST ipage : confluencePages) {
 				//断点续爬，颗粒度：页面
 				if (skipPage) {
 					if (ipage.getId().equals(continuePageid)) {
