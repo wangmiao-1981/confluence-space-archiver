@@ -58,6 +58,7 @@ public class ConfluenceApplicationST {
 		for (ConfluencePageST ispace : spacelist) {
 			log.info("----------------------------------------------------------------------");
 			log.info("Download space: {} {} {}/{}", ispace.getName(), ispace.getId(), i, total);
+			log.info("----------------------------------------------------------------------");
 			i++;
 			
 			//断点续爬，颗粒度：空间
@@ -95,7 +96,7 @@ public class ConfluenceApplicationST {
 				}
 				
 				//查缺补漏专用，发现有的页面没下载，可能是迭代过程中出的花样，回头重下一遍验证看看
-				if (true) {
+				if (false) {
 					File pageIndex = new File(confluenceSpaceArchiver.ROOT_LOCAL_PATH + File.separator + "page-" + ipage.getId() + File.separator + "index.html");
 					if (pageIndex.exists()) {
 						log.info("Skipping page {} {} {}", ipage.getName(), ipage.getId(), ipage.getUrl());

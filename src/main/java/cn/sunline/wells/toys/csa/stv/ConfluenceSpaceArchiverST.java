@@ -1,24 +1,19 @@
 package cn.sunline.wells.toys.csa.stv;
 
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.http.Header;
-import org.apache.http.HttpEntity;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
+import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-import org.springframework.util.StreamUtils;
 
 import java.io.*;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -26,29 +21,34 @@ import java.util.Map;
  * 单线程版本
  */
 @Slf4j
+@Data
 public class ConfluenceSpaceArchiverST {
 	// 地址常量
 	public String ROOT_LOCAL_PATH = "/Users/mmao/mmVolume/Documents/work-长亮科技/DEP-解决方案&产品管理部/UUU-知识库Confluence";
 	public String ROOT_CONFLUENCE;
-	public static final String PAGES_VIEWPAGE_ACTION_PAGE_ID = "/pages/viewpage.action?pageId=";
-	public static final String PAGES_VIEWINFO_ACTION_PAGE_ID = "/pages/viewinfo.action?pageId=";
-	public static final String PAGES_VIEWATTACHMENT_ACTION_PAGE_ID = "/pages/viewpageattachments.action?pageId=";
+	private static final String PAGES_VIEWPAGE_ACTION_PAGE_ID = "/pages/viewpage.action?pageId=";
+	private static final String PAGES_VIEWINFO_ACTION_PAGE_ID = "/pages/viewinfo.action?pageId=";
+	private static final String PAGES_VIEWATTACHMENT_ACTION_PAGE_ID = "/pages/viewpageattachments.action?pageId=";
 	private static final String SPACES_SEARCH_ACTION = "/rest/spacedirectory/1/search?query=&type=global&status=current&pageSize=1&startIndex=0";
-	public String VIEW_PAGE;
-	public String VIEW_INFO;
-	public String VIEW_ATTACHMENT;
-	public String VIEW_SPACE_LIST;
-	public String DO_LOGIN_PARAM;
+	private static final String LOGIN_ACTION = "/dologin.action";
+	private String VIEW_PAGE;
+	private String VIEW_INFO;
+	private String VIEW_ATTACHMENT;
+	private String VIEW_SPACE_LIST;
+	private String DO_LOGIN_PARAM;
+	
 	// 用户名
 	private final String username;
 	private final String password;
+	
 	// 其他
 	private final ThreadLocal<String> tlSessionCookie = new ThreadLocal<>();
 	private final CloseableHttpClient httpclient = HttpClients.createDefault();
 	private final ArrayList<String> uniPageIdQueue = new ArrayList<>();
+	private final ThreadLocal<Map<String, String>> sessionCookies = new ThreadLocal<Map<String, String>>();
 	
 	/**
-	 * 空间的用户名、密码、根URL
+	 * 拼装URL
 	 *
 	 * @param username
 	 * @param password
@@ -62,82 +62,32 @@ public class ConfluenceSpaceArchiverST {
 		this.VIEW_INFO = this.ROOT_CONFLUENCE + PAGES_VIEWINFO_ACTION_PAGE_ID;
 		this.VIEW_ATTACHMENT = this.ROOT_CONFLUENCE + PAGES_VIEWATTACHMENT_ACTION_PAGE_ID;
 		this.VIEW_SPACE_LIST = this.ROOT_CONFLUENCE + SPACES_SEARCH_ACTION;
-		this.DO_LOGIN_PARAM = "/dologin.action?os_username=" + this.username + "&os_password=" + this.password + "&login=%E7%99%BB%E5%BD%95&os_destination=";
+		this.DO_LOGIN_PARAM = this.ROOT_CONFLUENCE + LOGIN_ACTION;
 	}
 	
 	/**
 	 * 登录上去，保存session到cookie
 	 */
 	public void login() {
-		//访问首页，未登录，获取所需session内容
-		this.getSession(this.ROOT_CONFLUENCE, this.httpclient);
-		//尝试登录
-		this.login(this.ROOT_CONFLUENCE + this.DO_LOGIN_PARAM, this.httpclient);
-	}
-	
-	//使用threadLocal来保存线程应该有的cookie用以保持session
-	private void getSession(String url, CloseableHttpClient httpclient) {
-		HttpGet httpget = this.getHttpGet(url);
-		try (CloseableHttpResponse response = httpclient.execute(httpget)) {
-			for (Header obj : response.getAllHeaders()) {
-				if ("Set-Cookie".equals(obj.getName())) {
-					if (this.tlSessionCookie.get() == null || "".equals(this.tlSessionCookie.get())) {
-						this.tlSessionCookie.set(obj.getValue());
-					}
-				}
+		try {
+			Connection.Response response = Jsoup.connect(this.DO_LOGIN_PARAM)
+					.data("os_username", this.getUsername())
+					.data("os_password", this.getPassword())
+					.execute();
+			if (response.headers().get("X-AUSERNAME").equals(this.getUsername())) {
+				log.info(this.getUsername() + " Login success.");
+				
+				//保存sessionCookies
+				this.sessionCookies.set(response.cookies());
+			} else {
+				log.error(this.getUsername() + " Login failed.");
+				return;
 			}
-		} catch (Throwable e) {
-			e.printStackTrace();
+			
+		} catch (IOException e) {
+			log.error("Jsoup login error \n {}", e);
 		}
-	}
-	
-	//获取httpget，包含登录状态
-	private HttpGet getHttpGet(String url) {
-		HttpGet httpget = new HttpGet(url);
-		generateDefaultHttpHeader().entrySet().forEach(e -> httpget.addHeader(e.getKey(), e.getValue()));
-		if (this.tlSessionCookie.get() != null && !"".equals(this.tlSessionCookie.get())) {
-			httpget.addHeader("Cookie", this.tlSessionCookie.get());
-		}
-		//设置超时控制相关时间参数
-		httpget.setConfig(RequestConfig.custom() //
-				.setConnectionRequestTimeout(50000) //
-				.setConnectTimeout(10000) //
-				.setSocketTimeout(10000) //
-				.build());
-		return httpget;
-	}
-	
-	//默认头填充
-	private static Map<String, String> generateDefaultHttpHeader() {
-		Map<String, String> map = new HashMap<>();
-		map.put("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3");
-		map.put("accept-language", "zh-CN,zh;q=0.9");
-		map.put("connection", "keep-alive");
-		//这里先不用 map.put("content-length","87");
-		map.put("content-type", "application/x-www-form-urlencoded");
-		map.put("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.120 Safari/537.36");
-		return map;
-	}
-	
-	//登录过程
-	private void login(String url, CloseableHttpClient httpclient) {
-		HttpGet httpget = this.getHttpGet(url);
-		try (CloseableHttpResponse response = httpclient.execute(httpget)) {
-			HttpEntity entity = response.getEntity();
-			for (Header obj : response.getAllHeaders()) {
-				//System.out.println("url = [" + obj.getName() + "]"+obj.getValue());
-				if ("X-AUSERNAME".equals(obj.getName())) {
-					if (this.username.equals(obj.getValue())) {
-						log.info(this.username + " 登录成功");
-					} else {
-						log.error(obj.getValue());
-						throw new Exception(this.username + " 登录失败");
-					}
-				}
-			}
-		} catch (Throwable e) {
-			e.printStackTrace();
-		}
+		
 	}
 	
 	/**
@@ -150,12 +100,18 @@ public class ConfluenceSpaceArchiverST {
 		List<ConfluencePageST> ret = new ArrayList<ConfluencePageST>();
 		
 		//获取"页面信息"，里面有"子页面"，从这里解析包含的页面
-		Document doc = this.getHtml(this.VIEW_INFO + pageid, this.httpclient);
+		String urlPageInfo = this.VIEW_INFO + pageid;
+		Document doc = null;
+		try {
+			doc = Jsoup.connect(urlPageInfo).cookies(this.sessionCookies.get()).execute().parse();
+		} catch (IOException e) {
+			log.error("Jsoup getSubPages from {} \n {}", urlPageInfo, e);
+		}
+		
 		if (doc == null || doc.title().contains("页面未找到")) {
-			log.error("Get nothing from url:{}", this.VIEW_INFO + pageid);
+			log.error("Get nothing from {}", urlPageInfo);
 			return ret;
 		}
-		log.debug("Response doc = " + doc);
 		
 		//抓子页面
 		Elements subPages = doc.select("span:contains(父页面)");
@@ -171,7 +127,7 @@ public class ConfluenceSpaceArchiverST {
 			if (doc.select("#content .pageInfoTable").size() >= 2) {
 				subPages = doc.select("#content .pageInfoTable").get(1).select("A");
 			} else {
-				log.error("No pageInfoTabe from page : {} ", this.VIEW_INFO + pageid);
+				log.error("No pageInfoTabe from {} ", this.VIEW_INFO + pageid);
 			}
 		}
 		
@@ -179,54 +135,14 @@ public class ConfluenceSpaceArchiverST {
 		for (int i = 0; i < subPages.size(); i++) {
 			Element iElement = subPages.get(i);
 			String name = iElement.text();
-			String url = this.ROOT_CONFLUENCE + iElement.attr("href");
-			String id = url.substring(url.indexOf("pageId") + 7);
-			log.debug("Subpage name: {} , id: {} , url: {}", name, id, url);
-			ConfluencePageST subPage = new ConfluencePageST(name, id, url);
+			String urlhref = this.ROOT_CONFLUENCE + iElement.attr("href");
+			String id = urlhref.substring(urlhref.indexOf("pageId") + 7);
+			log.debug("Subpage name: {} , id: {} , url: {}", name, id, urlhref);
+			ConfluencePageST subPage = new ConfluencePageST(name, id, urlhref);
 			ret.add(subPage);
 		}
 		
 		return ret;
-	}
-	
-	//获取页面html，返回Document
-	private Document getHtml(String url, CloseableHttpClient httpclient) {
-		HttpGet httpget = this.getHttpGet(url);
-		try (CloseableHttpResponse response = httpclient.execute(httpget)) {
-			HttpEntity entity = response.getEntity();
-			return Jsoup.parse(entity.getContent(), "UTF-8", this.ROOT_CONFLUENCE);
-		} catch (Throwable e) {
-			e.printStackTrace();
-		}
-		return null;
-	}
-	
-	/**
-	 * 下载指定文件
-	 *
-	 * @param attachmentUrl
-	 * @param fileName
-	 * @param filePatch
-	 * @throws Throwable
-	 */
-	private void downloadAttachment(String attachmentUrl, String fileName, String filePatch) throws Throwable {
-		File desc = new File(filePatch + File.separator + fileName);
-		File folder = desc.getParentFile();
-		if (desc.exists()) {
-			return;
-		}
-		folder.mkdirs();
-		HttpGet httpget = this.getHttpGet(attachmentUrl);
-		try (CloseableHttpResponse response = this.httpclient.execute(httpget)) {
-			HttpEntity entity = response.getEntity();
-			try (InputStream is = entity.getContent(); //
-			     OutputStream os = new FileOutputStream(desc)) {
-				StreamUtils.copy(is, os);
-			}
-			log.info("下载：" + fileName + " 成功");
-		} catch (Throwable e) {
-			e.printStackTrace();
-		}
 	}
 	
 	/**
@@ -287,12 +203,18 @@ public class ConfluenceSpaceArchiverST {
 		List<String[]> ret = new ArrayList<>();
 		
 		//获取"附件信息"
-		Document doc = this.getHtml(this.VIEW_ATTACHMENT + pageid, this.httpclient);
-		if (doc == null || doc.title().contains("页面未找到")) {
-			log.error("Get nothing from url:{}", this.VIEW_INFO + pageid);
+		String url = this.VIEW_ATTACHMENT + pageid;
+		Document doc = null;
+		try {
+			doc = Jsoup.connect(url).cookies(this.sessionCookies.get()).execute().parse();
+		} catch (IOException e) {
+			log.error("Jsoup getAttachments from {} \n {}", url, e);
 			return ret;
 		}
-		log.debug("Response doc = " + doc);
+		if (doc.title().contains("页面未找到")) {
+			log.error("Get nothing from  {}", url);
+			return ret;
+		}
 		
 		//解析 - 取所有附件
 		Elements attachmentsA = doc.select("A.filename:not(:contains(版本))");
@@ -315,18 +237,26 @@ public class ConfluenceSpaceArchiverST {
 			}
 			
 			//取分页面，解析其中附件
-			Document doc1 = this.getHtml(ilink.attr("abs:href"), this.httpclient);
-			if (doc1 != null) {
-				log.debug("Response doc = " + doc);
-				//解析 - 取所有附件
-				Elements attachmentsB = doc1.select("A.filename:not(:contains(版本))");
-				for (int i = 0; i < attachmentsB.size(); i++) {
-					Element iElement = attachmentsB.get(i);
-					String filename = iElement.text();
-					String href = iElement.attr("abs:href");
-					String[] oneAttachment = {filename, href};
-					ret.add(oneAttachment);
-				}
+			Document doc1 = null;
+			try {
+				doc1 = Jsoup.connect(ilink.attr("abs:href")).cookies(this.sessionCookies.get()).execute().parse();
+			} catch (IOException e) {
+				log.error("Jsoup getAttachments from {} \n {}", url, e);
+				continue;
+			}
+			if (doc1.title().contains("页面未找到")) {
+				log.error("Get nothing from  {}", url);
+				continue;
+			}
+			
+			//解析 - 取所有附件
+			Elements attachmentsB = doc1.select("A.filename:not(:contains(版本))");
+			for (int i = 0; i < attachmentsB.size(); i++) {
+				Element iElement = attachmentsB.get(i);
+				String filename = iElement.text();
+				String href = iElement.attr("abs:href");
+				String[] oneAttachment = {filename, href};
+				ret.add(oneAttachment);
 			}
 		}
 		return ret;
@@ -370,39 +300,65 @@ public class ConfluenceSpaceArchiverST {
 	 *
 	 * @param page
 	 */
-	public void downloadPageHtml(ConfluencePageST page) throws IOException {
-		//为每个页面单独准备目录
-		FileUtils.forceMkdir(new File(this.ROOT_LOCAL_PATH + "/page-" + page.getId()));
-		
-		//获取页面
-		Document doc = this.getHtml(page.getUrl(), this.httpclient);
-		
-		//下载页面中的css、js、image，并调整doc中的href
-		String postfix = "";// 文件后缀名作为文件前缀
-		int index = 0; // 用于文件名前缀，防止重名文件覆盖
-		Elements importcss = doc.select("link[href]");// 找到document中带有link标签的元素
-		for (Element link : importcss) {
-			postfix = "css";
-			if (link.attr("rel").equals("stylesheet")) {// 如果rel属性为HtmlFileLink
-				String href = link.attr("abs:href");// 得到css样式的href的绝对路径
-				String filename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/elements/" + postfix + index + "." + postfix;
-				link.attr("href", filename);
-				this.downloadFileFromUrl(href, filename);
-				index++;
+	public void downloadPageHtml(ConfluencePageST page) {
+		try {
+			//为每个页面单独准备目录
+			FileUtils.forceMkdir(new File(this.ROOT_LOCAL_PATH + "/page-" + page.getId()));
+			
+			//获取页面
+			Document doc = Jsoup.connect(page.getUrl()).cookies(this.sessionCookies.get()).execute().parse();
+			
+			//下载页面中的css、js、image，并调整doc中的href
+			String postfix = "";// 文件后缀名作为文件前缀
+			int index = 0; // 用于文件名前缀，防止重名文件覆盖
+			Elements importcss = doc.select("link[href]");// 找到document中带有link标签的元素
+			for (Element link : importcss) {
+				postfix = "css";
+				if (link.attr("rel").equals("stylesheet")) {// 如果rel属性为HtmlFileLink
+					String href = link.attr("abs:href");// 得到css样式的href的绝对路径
+					String filename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/elements/" + postfix + index + "." + postfix;
+					link.attr("href", filename);
+					this.downloadFileFromUrl(href, filename);
+					index++;
+				}
 			}
-		}
-		Elements media = doc.select("[src]");
-		for (Element link : media) {
-			if (link.tagName().equals("img")) {
-				String src = link.attr("abs:src");
-				postfix = this.getPostfix(src);
-				String filename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/elements/" + postfix + index + "." + postfix;
-				link.attr("src", filename);
-				this.downloadFileFromUrl(src, filename);
-				index++;
-			}
-			if (link.tagName().equals("input")) {
-				if (link.attr("type").equals("Image")) {
+			Elements media = doc.select("[src]");
+			for (Element link : media) {
+				if (link.tagName().equals("img")) {
+					String src = link.attr("abs:src");
+					postfix = this.getPostfix(src);
+					String filename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/elements/" + postfix + index + "." + postfix;
+					link.attr("src", filename);
+					this.downloadFileFromUrl(src, filename);
+					index++;
+				}
+				if (link.tagName().equals("input")) {
+					if (link.attr("type").equals("Image")) {
+						String src = link.attr("abs:src");
+						postfix = this.getPostfix(src);
+						String filename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/elements/" + postfix + index + "." + postfix;
+						link.attr("src", filename);
+						this.downloadFileFromUrl(src, filename);
+						index++;
+					}
+				}
+				if (link.tagName().equals("javascript") || link.tagName().equals("script")) {
+					String src = link.attr("abs:src");
+					postfix = this.getPostfix(src);
+					String filename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/elements/" + postfix + index + "." + postfix;
+					link.attr("src", filename);
+					this.downloadFileFromUrl(src, filename);
+					index++;
+				}
+				if (link.tagName().equals("iframe")) {
+					String src = link.attr("abs:src");
+					postfix = this.getPostfix(src);
+					String filename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/elements/" + postfix + index + "." + postfix;
+					link.attr("src", filename);
+					this.downloadFileFromUrl(src, filename);
+					index++;
+				}
+				if (link.tagName().equals("embed")) {
 					String src = link.attr("abs:src");
 					postfix = this.getPostfix(src);
 					String filename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/elements/" + postfix + index + "." + postfix;
@@ -411,72 +367,69 @@ public class ConfluenceSpaceArchiverST {
 					index++;
 				}
 			}
-			if (link.tagName().equals("javascript") || link.tagName().equals("script")) {
-				String src = link.attr("abs:src");
-				postfix = this.getPostfix(src);
-				String filename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/elements/" + postfix + index + "." + postfix;
-				link.attr("src", filename);
-				this.downloadFileFromUrl(src, filename);
-				index++;
-			}
-			if (link.tagName().equals("iframe")) {
-				String src = link.attr("abs:src");
-				postfix = this.getPostfix(src);
-				String filename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/elements/" + postfix + index + "." + postfix;
-				link.attr("src", filename);
-				this.downloadFileFromUrl(src, filename);
-				index++;
-			}
-			if (link.tagName().equals("embed")) {
-				String src = link.attr("abs:src");
-				postfix = this.getPostfix(src);
-				String filename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/elements/" + postfix + index + "." + postfix;
-				link.attr("src", filename);
-				this.downloadFileFromUrl(src, filename);
-				index++;
-			}
-		}
-		
-		//替换目录：父页面、子页面
-		List<String[]> newPageTree = this.recursiveTree2Menu(page, " ");
-		Element pagetree = doc.select("div.plugin_pagetree").first();
-		try {
-			pagetree.children().remove();
-			if (page.getParentID() != null) {
-				pagetree.append("<a href='../page-" + page.getParentID() + "/index.html'>返回上级页面</a><br/>");
-			}
-			for (String[] pagecon : newPageTree) {
-				pagetree.append("<a href='../page-" + pagecon[1] + "/index.html'>" + pagecon[0] + "</a><br/>");
+			
+			//替换目录：父页面、子页面
+			List<String[]> newPageTree = this.recursiveTree2Menu(page, " ");
+			Element pagetree = doc.select("div.plugin_pagetree").first();
+			try {
+				pagetree.children().remove();
+				//看不到左侧的列表，要补个stlye和元素
+				Element sidebar = doc.select("div.ia-fixed-sidebar").first();
+				sidebar.attr("style", "width: 285px; visibility: visible; top: 40px; left: 0px;");
+				sidebar.append("<div class=\"ia-splitter-handle tipsy-enabled\" data-tooltip=\"收起侧边栏 ( [ )\" original-title=\" ([)\"><div class=\"ia-splitter-handle-highlight confluence-icon-grab-handle\"></div></div>");
+				
+				if (page.getParentID() != null) {
+					pagetree.append("<a href='../page-" + page.getParentID() + "/index.html'>返回上级页面</a><br/>");
+				}
+				for (String[] pagecon : newPageTree) {
+					pagetree.append("<a href='../page-" + pagecon[1] + "/index.html'>" + pagecon[0] + "</a><br/>");
+				}
+				
+			} catch (Exception e) {
 			}
 			
-		} catch (Exception e) {
-		}
-		
-		//调整A标签，重定向pagid的目录
-		Elements pagelinks = doc.select("a[href^=/pages/viewpage.action?pageId=]");
-		for (Element apagelink : pagelinks) {
-			String ahref = apagelink.attr("href");
-			if (ahref.indexOf("&") > 0) {
-				ahref = ahref.substring(ahref.indexOf("=") + 1, ahref.indexOf("&"));
-			} else {
-				ahref = ahref.substring(ahref.indexOf("=") + 1);
+			//调整A标签，重定向pagid的目录
+			Elements pagelinks = doc.select("a[href^=/pages/viewpage.action?pageId=]");
+			for (Element apagelink : pagelinks) {
+				String ahref = apagelink.attr("href");
+				if (ahref.indexOf("&") > 0) {
+					ahref = ahref.substring(ahref.indexOf("=") + 1, ahref.indexOf("&"));
+				} else {
+					ahref = ahref.substring(ahref.indexOf("=") + 1);
+				}
+				apagelink.attr("href", "../page-" + ahref + "/index.html");
 			}
-			apagelink.attr("href", "../page-" + ahref + "/index.html");
+			
+			//补充附件列表进去
+			List<String[]> attachmentset = page.getAttachments();
+			if (attachmentset.size() > 0) {
+				Element commentSection = doc.select("div#comments-section").first();
+				commentSection.append("<br/>Attachments:<hr><br/>");
+				for (String[] attachmentItem : attachmentset) {
+					String filename = attachmentItem[0];
+					String fileurl = attachmentItem[1];
+					fileurl = fileurl.substring(fileurl.indexOf("/download/attachments"));
+					commentSection.append("<a href=\"" + fileurl + "\">" + filename + "<a><br/>");
+				}
+			}
+			
+			//调整附件标签，重定向到attachments目录
+			Elements attachmentlinks = doc.select("a[href^=/download/attachments]");
+			for (Element attachmentLink : attachmentlinks) {
+				String ahref = attachmentLink.attr("href");
+				ahref = ahref.substring(ahref.indexOf(page.getId()) + page.getId().length() + 1);
+				attachmentLink.attr("href", "attachments/" + ahref);
+			}
+			
+			//保存页面
+			String html = doc.html();
+			html = html.replaceAll("\n", "\r\n");
+			FileUtils.writeStringToFile(new File(this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/" + "index.html"), html, "utf8");
+			
+		} catch (Exception e) {
+			log.error("DownloadPageHtml {} \n {}", page.getUrl(), e);
 		}
-		
-		//调整附件标签，重定向pagid的目录
-		Elements attachmentlinks = doc.select("a[href^=/download/attachments]");
-		for (Element attachmentLink : attachmentlinks) {
-			String ahref = attachmentLink.attr("href");
-			ahref = ahref.substring(ahref.indexOf(page.getId()) + page.getId().length() + 1);
-			attachmentLink.attr("href", "attachments/" + ahref);
-		}
-		
-		//保存页面
-		String html = doc.html();
-		html = html.replaceAll("\n", "\r\n");
-		FileUtils.writeStringToFile(new File(this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/" + "index.html"), html, "utf8");
-		
+
 	}
 	
 	/**
@@ -488,15 +441,6 @@ public class ConfluenceSpaceArchiverST {
 		for (String[] attachment : page.getAttachments()) {
 			String filename = attachment[0];
 			String fileurl = attachment[1];
-			
-			//这个下载失败了，都是37K的文件，不知道是啥问题，回头再研究
-			//			try {
-			//				FileUtils.copyURLToFile(new URL(fileurl) , new File(this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/attachments/" + filename));
-			//				log.info("Attachment downloaded：" , fileurl);
-			//			} catch (IOException e) {
-			//				log.error("Attachment downloading..：" , fileurl);
-			//				e.printStackTrace();
-			//			}
 			
 			this.downloadFileFromUrl(fileurl, this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/attachments/" + filename);
 		}
@@ -512,22 +456,25 @@ public class ConfluenceSpaceArchiverST {
 	private void downloadFileFromUrl(String url, String fileFullPathAndName) {
 		File desc = new File(fileFullPathAndName);
 		try {
+			log.debug("File downloading：" + url);
 			FileUtils.forceMkdir(desc.getParentFile());
 			
-			log.info("File downloading：" + url);
-			HttpGet httpget = this.getHttpGet(url);
-			try (CloseableHttpResponse response = this.httpclient.execute(httpget)) {
-				HttpEntity entity = response.getEntity();
-				try (InputStream is = entity.getContent(); //
-				     OutputStream os = new FileOutputStream(desc)) {
-					StreamUtils.copy(is, os);
-					log.info("File downloaded：" + url);
-				} catch (Throwable e) {
-					log.error("File download fail：{} {}", url, e);
-				}
-			} catch (Throwable e) {
-				log.error("File download fail：{} {}", url, e);
+			Connection.Response response = Jsoup.connect(url).method(Connection.Method.GET).ignoreContentType(true).cookies(this.getSessionCookies().get()).execute();
+			
+			//用stream写入文件
+			BufferedInputStream bufferedInputStream = response.bodyStream();
+			byte[] buffer = new byte[1024];
+			int readLenghth;
+			FileOutputStream fileOutputStream = new FileOutputStream(new File(fileFullPathAndName));
+			BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
+			while ((readLenghth = bufferedInputStream.read(buffer, 0, 1024)) != -1) {//先读出来，保存在buffer数组中
+				bufferedOutputStream.write(buffer, 0, readLenghth);//再从buffer中取出来保存到本地
 			}
+			bufferedOutputStream.close();
+			fileOutputStream.close();
+			bufferedInputStream.close();
+			
+			log.info("File downloaded：" + url);
 		} catch (Exception e) {
 			log.error("File download fail：{} {}", url, e);
 		}
@@ -554,31 +501,37 @@ public class ConfluenceSpaceArchiverST {
 	public List<ConfluencePageST> getSpaceList() {
 		List<ConfluencePageST> ret = new ArrayList<>();
 		
-		//获取spaces总数
-		Document doc = this.getHtml(this.VIEW_SPACE_LIST, this.httpclient);
-		int totalSpaces = Integer.parseInt(doc.select("totalsize").first().text());
-		
-		//循环获取spaces
-		this.VIEW_SPACE_LIST = this.VIEW_SPACE_LIST.replaceAll("pageSize=1", "pageSize=10");
-		String newVIEW_SPACE_LIST = this.VIEW_SPACE_LIST;
-		for (int i = 0; i < totalSpaces / 10 + 1; i++) {
-			this.VIEW_SPACE_LIST = newVIEW_SPACE_LIST.replaceAll("startIndex=0", "startIndex=" + i * 10);
-			Document doc1 = this.getHtml(this.VIEW_SPACE_LIST, this.httpclient);
-			Elements spaces = doc1.select("spaces");
-			for (Element space : spaces) {
-				if (space.html().contains("pageId")) {
-					Element alink = space.select("link[rel=alternate]").first();
-					String spacename = space.attr("name");
-					String spaceurl = alink.attr("href");
-					String spaceid = spaceurl.substring(spaceurl.indexOf("pageId=") + 7);
-					
-					ConfluencePageST newSpace = new ConfluencePageST(spacename, spaceid, spaceurl);
-					ret.add(newSpace);
-					log.debug("Recognized a spaces: {}" + newSpace);
-				} else {
-					log.debug("Not a space:{}", space.attr("name"));
+		try {
+			log.debug("Jsoup require spacelist: {}", this.VIEW_SPACE_LIST);
+			//获取spaces总数
+			Document doc = Jsoup.connect(this.VIEW_SPACE_LIST).cookies(this.sessionCookies.get()).execute().parse();
+			
+			//循环获取spaces
+			int totalSpaces = Integer.parseInt(doc.select("totalsize").first().text());
+			String newVIEW_SPACE_LIST = this.VIEW_SPACE_LIST.replaceAll("pageSize=1", "pageSize=10");
+			for (int i = 0; i < totalSpaces / 10 + 1; i++) {
+				String url = newVIEW_SPACE_LIST.replaceAll("startIndex=0", "startIndex=" + i * 10);
+				
+				Document doc1 = Jsoup.connect(url).cookies(this.sessionCookies.get()).execute().parse();
+				
+				Elements spaces = doc1.select("spaces");
+				for (Element space : spaces) {
+					if (space.html().contains("pageId")) {
+						Element alink = space.select("link[rel=alternate]").first();
+						String spacename = space.attr("name");
+						String spaceurl = alink.attr("href");
+						String spaceid = spaceurl.substring(spaceurl.indexOf("pageId=") + 7);
+						
+						ConfluencePageST newSpace = new ConfluencePageST(spacename, spaceid, spaceurl);
+						ret.add(newSpace);
+						log.debug("Recognized a spaces: {}", newSpace);
+					} else {
+						log.debug("Not a space:{}", space.attr("name"));
+					}
 				}
 			}
+		} catch (IOException e) {
+			log.error("GetSpaceList from {} \n {}", this.VIEW_SPACE_LIST, e);
 		}
 		
 		return ret;
