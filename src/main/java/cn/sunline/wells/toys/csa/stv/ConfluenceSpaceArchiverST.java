@@ -96,7 +96,7 @@ public class ConfluenceSpaceArchiverST {
 	 * @param pageid
 	 * @return
 	 */
-	private List<ConfluencePageST> getSubPages(String pageid) {
+	public List<ConfluencePageST> getSubPages(String pageid) {
 		List<ConfluencePageST> ret = new ArrayList<ConfluencePageST>();
 		
 		//获取"页面信息"，里面有"子页面"，从这里解析包含的页面
@@ -114,7 +114,7 @@ public class ConfluenceSpaceArchiverST {
 		}
 		
 		//抓子页面
-		Elements subPages = doc.select("span:contains(父页面)");
+		Elements subPages = doc.select("span:contains(子页面)");
 		if (subPages.size() > 0) {
 			//那个讨厌的列表上面有个父页面，要排除了
 			subPages = doc.select("span:contains(子页面)");
@@ -137,6 +137,14 @@ public class ConfluenceSpaceArchiverST {
 			String name = iElement.text();
 			String urlhref = this.ROOT_CONFLUENCE + iElement.attr("href");
 			String id = urlhref.substring(urlhref.indexOf("pageId") + 7);
+			if (urlhref.contains("/display/")) {
+				try {
+					urlhref = Jsoup.connect(urlhref).cookies(this.sessionCookies.get()).execute().parse().select("A#view-page-info-link").attr("href");
+				} catch (IOException e) {
+					log.error("Jsoup connect {} error \n {}", urlhref, e);
+				}
+				id = urlhref.substring(urlhref.indexOf("pageId") + 7);
+			}
 			log.debug("Subpage name: {} , id: {} , url: {}", name, id, urlhref);
 			ConfluencePageST subPage = new ConfluencePageST(name, id, urlhref);
 			ret.add(subPage);
