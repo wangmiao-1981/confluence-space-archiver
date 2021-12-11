@@ -103,7 +103,10 @@ public class ConfluenceSpaceArchiverST {
 		String urlPageInfo = this.VIEW_INFO + pageid;
 		Document doc = null;
 		try {
-			doc = Jsoup.connect(urlPageInfo).cookies(this.sessionCookies.get()).execute().parse();
+			doc = Jsoup.connect(urlPageInfo)
+					.cookies(this.sessionCookies.get())
+					.execute()
+					.parse();
 		} catch (IOException e) {
 			log.error("Jsoup getSubPages from {} \n {}", urlPageInfo, e);
 		}
@@ -139,7 +142,12 @@ public class ConfluenceSpaceArchiverST {
 			String id = urlhref.substring(urlhref.indexOf("pageId") + 7);
 			if (urlhref.contains("/display/")) {
 				try {
-					urlhref = Jsoup.connect(urlhref).cookies(this.sessionCookies.get()).execute().parse().select("A#view-page-info-link").attr("href");
+					urlhref = Jsoup.connect(urlhref)
+							.cookies(this.sessionCookies.get())
+							.execute()
+							.parse()
+							.select("A#view-page-info-link")
+							.attr("href");
 				} catch (IOException e) {
 					log.error("Jsoup connect {} error \n {}", urlhref, e);
 				}
@@ -214,7 +222,10 @@ public class ConfluenceSpaceArchiverST {
 		String url = this.VIEW_ATTACHMENT + pageid;
 		Document doc = null;
 		try {
-			doc = Jsoup.connect(url).cookies(this.sessionCookies.get()).execute().parse();
+			doc = Jsoup.connect(url)
+					.cookies(this.sessionCookies.get())
+					.execute()
+					.parse();
 		} catch (IOException e) {
 			log.error("Jsoup getAttachments from {} \n {}", url, e);
 			return ret;
@@ -247,13 +258,16 @@ public class ConfluenceSpaceArchiverST {
 			//取分页面，解析其中附件
 			Document doc1 = null;
 			try {
-				doc1 = Jsoup.connect(ilink.attr("abs:href")).cookies(this.sessionCookies.get()).execute().parse();
+				doc1 = Jsoup.connect(ilink.attr("abs:href"))
+						.cookies(this.sessionCookies.get())
+						.execute()
+						.parse();
 			} catch (IOException e) {
-				log.error("Jsoup getAttachments from {} \n {}", url, e);
+				log.error("Jsoup getAttachments from {} \n {}", url, e.getMessage());
 				continue;
 			}
 			if (doc1.title().contains("页面未找到")) {
-				log.error("Get nothing from  {}", url);
+				log.error("Get nothing from {}", url);
 				continue;
 			}
 			
@@ -314,7 +328,10 @@ public class ConfluenceSpaceArchiverST {
 			FileUtils.forceMkdir(new File(this.ROOT_LOCAL_PATH + "/page-" + page.getId()));
 			
 			//获取页面
-			Document doc = Jsoup.connect(page.getUrl()).cookies(this.sessionCookies.get()).execute().parse();
+			Document doc = Jsoup.connect(page.getUrl())
+					.cookies(this.sessionCookies.get())
+					.execute()
+					.parse();
 			
 			//下载页面中的css、js、image，并调整doc中的href
 			String postfix = "";// 文件后缀名作为文件前缀
@@ -462,12 +479,19 @@ public class ConfluenceSpaceArchiverST {
 	 * @throws Throwable
 	 */
 	private void downloadFileFromUrl(String url, String fileFullPathAndName) {
-		File desc = new File(fileFullPathAndName);
 		try {
 			log.debug("File downloading：" + url);
+			
+			//准备父目录
+			File desc = new File(fileFullPathAndName);
 			FileUtils.forceMkdir(desc.getParentFile());
 			
-			Connection.Response response = Jsoup.connect(url).method(Connection.Method.GET).ignoreContentType(true).cookies(this.getSessionCookies().get()).execute();
+			//获取文件，ignoreContentType
+			Connection.Response response = Jsoup.connect(url)
+					.method(Connection.Method.GET)
+					.ignoreContentType(true)
+					.cookies(this.getSessionCookies().get())
+					.execute();
 			
 			//用stream写入文件
 			BufferedInputStream bufferedInputStream = response.bodyStream();
@@ -512,7 +536,10 @@ public class ConfluenceSpaceArchiverST {
 		try {
 			log.debug("Jsoup require spacelist: {}", this.VIEW_SPACE_LIST);
 			//获取spaces总数
-			Document doc = Jsoup.connect(this.VIEW_SPACE_LIST).cookies(this.sessionCookies.get()).execute().parse();
+			Document doc = Jsoup.connect(this.VIEW_SPACE_LIST)
+					.cookies(this.sessionCookies.get())
+					.execute()
+					.parse();
 			
 			//循环获取spaces
 			int totalSpaces = Integer.parseInt(doc.select("totalsize").first().text());
@@ -520,7 +547,10 @@ public class ConfluenceSpaceArchiverST {
 			for (int i = 0; i < totalSpaces / 10 + 1; i++) {
 				String url = newVIEW_SPACE_LIST.replaceAll("startIndex=0", "startIndex=" + i * 10);
 				
-				Document doc1 = Jsoup.connect(url).cookies(this.sessionCookies.get()).execute().parse();
+				Document doc1 = Jsoup.connect(url)
+						.cookies(this.sessionCookies.get())
+						.execute()
+						.parse();
 				
 				Elements spaces = doc1.select("spaces");
 				for (Element space : spaces) {
@@ -531,7 +561,12 @@ public class ConfluenceSpaceArchiverST {
 					
 					if (spaceurl.contains("/display/")) {
 						try {
-							spaceurl = Jsoup.connect(spaceurl).cookies(this.sessionCookies.get()).execute().parse().select("A#view-page-info-link").attr("href");
+							spaceurl = Jsoup.connect(spaceurl)
+									.cookies(this.sessionCookies.get())
+									.execute()
+									.parse()
+									.select("A#view-page-info-link")
+									.attr("href");
 						} catch (IOException e) {
 							log.error("Jsoup connect {} error \n {}", spaceurl, e);
 						}
