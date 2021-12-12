@@ -117,22 +117,7 @@ public class ConfluenceSpaceArchiverST {
 		}
 		
 		//抓子页面
-		Elements subPages = doc.select("span:contains(子页面)");
-		if (subPages.size() > 0) {
-			//那个讨厌的列表上面有个父页面，要排除了
-			subPages = doc.select("span:contains(子页面)");
-			//有些页面没了子页面
-			if (subPages.size() > 0) {
-				subPages = subPages.first().parent().select("A:not([onclick])");
-			}
-		} else {
-			//初级页面，没有父页面干扰
-			if (doc.select("#content .pageInfoTable").size() >= 2) {
-				subPages = doc.select("#content .pageInfoTable").get(1).select("A");
-			} else {
-				log.error("No pageInfoTabe from {} ", this.VIEW_INFO + pageid);
-			}
-		}
+		Elements subPages = doc.select("div:contains(层级) + div.basicPanelBody > table.pageInfoTable > tbody:contains(页面) > tr:not(:contains(父页面)) A:not([onclick])");
 		
 		//解析pageInfoTable - 取所有子页面
 		for (int i = 0; i < subPages.size(); i++) {
@@ -142,7 +127,7 @@ public class ConfluenceSpaceArchiverST {
 			String id = urlhref.substring(urlhref.indexOf("pageId") + 7);
 			if (urlhref.contains("/display/")) {
 				try {
-					urlhref = Jsoup.connect(urlhref)
+					urlhref = this.ROOT_CONFLUENCE + Jsoup.connect(urlhref)
 							.cookies(this.sessionCookies.get())
 							.execute()
 							.parse()
@@ -167,46 +152,51 @@ public class ConfluenceSpaceArchiverST {
 	 * @param page
 	 */
 	public void recursiveChildrenSubPages(ConfluencePageST page) {
-		log.info("Recursive {} {} {}", page.getName(), page.getId(), page.getUrl());
-		//防重、防回环检查
-		if (this.uniPageIdQueue.contains(page.getId())) {
-			log.info("Duplicated pageid found : {}", page.getId());
-			return;
-		}
-		this.uniPageIdQueue.add(page.getId());
-		
-		//对该页下的children进行分析，找出下一级子页面
-		for (int i = 0; i < page.childrens.size(); i++) {
-			ConfluencePageST iPage = page.childrens.get(i);
+		try {
+			log.info("Recursive {} {} {}", page.getName(), page.getId(), page.getUrl());
+			//防重、防回环检查
+			if (this.uniPageIdQueue.contains(page.getId())) {
+				log.info("Duplicated pageid found : {}", page.getId());
+				return;
+			}
+			this.uniPageIdQueue.add(page.getId());
 			
-			//获取附件列表，注意分页
-			List<String[]> attachments = this.getAttachments(iPage.getId());
-			if (attachments.size() > 0) {
+			//对该页下的children进行分析，找出下一级子页面
+			for (int i = 0; i < page.childrens.size(); i++) {
+				ConfluencePageST iPage = page.childrens.get(i);
+				
+				//获取附件列表，注意分页
+				List<String[]> attachments = this.getAttachments(iPage.getId());
 				log.info("Got attachments cnt:{} from pageid:{}", attachments.size(), iPage.getId());
-				iPage.getAttachments().addAll(attachments);
-				for (String[] attachment : attachments) {
-					log.debug("attachment:{} from pageid:{}", attachment, iPage.getId());
+				if (attachments.size() > 0) {
+					iPage.getAttachments().addAll(attachments);
+					for (String[] attachment : attachments) {
+						log.debug("attachment:{} from pageid:{}", attachment, iPage.getId());
+					}
 				}
-			}
-			
-			//每个子节点都刷一下，如果抓回来的子页面，继续递归
-			log.debug("Request subpages of child: name: {} , id: {} , url: {}", iPage.getName(), iPage.getId(), iPage.getUrl());
-			List<ConfluencePageST> subPages = this.getSubPages(iPage.getId());
-			if (subPages.size() > 0) {
+				
+				//每个子节点都刷一下，如果抓回来的子页面，继续递归
+				log.debug("Request subpages of child: name: {} , id: {} , url: {}", iPage.getName(), iPage.getId(), iPage.getUrl());
+				List<ConfluencePageST> subPages = this.getSubPages(iPage.getId());
 				log.info("Got subpages cnt:{} from pageid:{}", subPages.size(), iPage.getId());
-				for (ConfluencePageST subPage : subPages) {
-					log.debug("subpag:{}", subPage);
+				if (subPages.size() > 0) {
+					for (ConfluencePageST subPage : subPages) {
+						log.debug("subpag:{}", subPage);
+					}
+					//设置父页面ID
+					for (ConfluencePageST subPage : subPages) {
+						subPage.setParentID(iPage.getId());
+					}
+					//将抓回来的页面都加到当前面面的children中
+					iPage.childrens.addAll(subPages);
+					//递归
+					this.recursiveChildrenSubPages(iPage);
 				}
-				//设置父页面ID
-				for (ConfluencePageST subPage : subPages) {
-					subPage.setParentID(iPage.getId());
-				}
-				//将抓回来的页面都加到当前面面的children中
-				iPage.childrens.addAll(subPages);
-				//递归
-				this.recursiveChildrenSubPages(iPage);
 			}
+		} catch (Exception e) {
+			log.error("Recursive {} {} {} \n {}", page.getName(), page.getId(), page.getUrl(), e);
 		}
+
 	}
 	
 	/**
@@ -428,13 +418,13 @@ public class ConfluenceSpaceArchiverST {
 			//补充附件列表进去
 			List<String[]> attachmentset = page.getAttachments();
 			if (attachmentset.size() > 0) {
-				Element commentSection = doc.select("div#comments-section").first();
-				commentSection.append("<br/>Attachments:<hr><br/>");
+				Element attachmentsSection = doc.select("div#content").first();
+				attachmentsSection.append("<br/>Attachments:<hr><br/>");
 				for (String[] attachmentItem : attachmentset) {
 					String filename = attachmentItem[0];
 					String fileurl = attachmentItem[1];
 					fileurl = fileurl.substring(fileurl.indexOf("/download/attachments"));
-					commentSection.append("<a href=\"" + fileurl + "\">" + filename + "<a><br/>");
+					attachmentsSection.append("<a href=\"" + fileurl + "\">" + filename + "<a><br/>");
 				}
 			}
 			
@@ -534,6 +524,7 @@ public class ConfluenceSpaceArchiverST {
 		List<ConfluencePageST> ret = new ArrayList<>();
 		
 		try {
+			log.info("Requiring spacelist..");
 			log.debug("Jsoup require spacelist: {}", this.VIEW_SPACE_LIST);
 			//获取spaces总数
 			Document doc = Jsoup.connect(this.VIEW_SPACE_LIST)
@@ -561,7 +552,7 @@ public class ConfluenceSpaceArchiverST {
 					
 					if (spaceurl.contains("/display/")) {
 						try {
-							spaceurl = Jsoup.connect(spaceurl)
+							spaceurl = this.ROOT_CONFLUENCE + Jsoup.connect(spaceurl)
 									.cookies(this.sessionCookies.get())
 									.execute()
 									.parse()
