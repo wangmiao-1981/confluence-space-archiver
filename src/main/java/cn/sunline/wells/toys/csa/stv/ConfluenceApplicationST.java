@@ -105,7 +105,9 @@ public class ConfluenceApplicationST {
 				}
 				
 				//下载页面
+				log.info("----------------------------------------------------------------------");
 				log.info("Archiving {} {} {}", ipage.getName(), ipage.getId(), ipage.getUrl());
+				log.info("----------------------------------------------------------------------");
 				confluenceSpaceArchiver.downloadPageHtml(ipage);
 				confluenceSpaceArchiver.downloadPageAttachment(ipage);
 				

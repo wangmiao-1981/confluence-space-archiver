@@ -167,7 +167,7 @@ public class ConfluenceSpaceArchiverST {
 				
 				//获取附件列表，注意分页
 				List<String[]> attachments = this.getAttachments(iPage.getId());
-				log.info("Got attachments cnt:{} from pageid:{}", attachments.size(), iPage.getId());
+				log.info("Pageid:{} attachments cnt:{}", iPage.getId(), attachments.size());
 				if (attachments.size() > 0) {
 					iPage.getAttachments().addAll(attachments);
 					for (String[] attachment : attachments) {
@@ -176,9 +176,8 @@ public class ConfluenceSpaceArchiverST {
 				}
 				
 				//每个子节点都刷一下，如果抓回来的子页面，继续递归
-				log.debug("Request subpages of child: name: {} , id: {} , url: {}", iPage.getName(), iPage.getId(), iPage.getUrl());
 				List<ConfluencePageST> subPages = this.getSubPages(iPage.getId());
-				log.info("Got subpages cnt:{} from pageid:{}", subPages.size(), iPage.getId());
+				log.info("Pageid:{} subpages cnt:{}", iPage.getId(), subPages.size());
 				if (subPages.size() > 0) {
 					for (ConfluencePageST subPage : subPages) {
 						log.debug("subpag:{}", subPage);
@@ -498,7 +497,7 @@ public class ConfluenceSpaceArchiverST {
 			
 			log.info("File downloaded：" + url);
 		} catch (Exception e) {
-			log.error("File download fail：{} {}", url, e);
+			log.error("File download fail：{} {}", url, e.getMessage());
 		}
 	}
 	
