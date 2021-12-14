@@ -4,8 +4,6 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -13,9 +11,7 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
 import java.io.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * 单线程版本
@@ -42,9 +38,8 @@ public class ConfluenceSpaceArchiverST {
 	private final String password;
 	
 	// 其他
-	private final ThreadLocal<String> tlSessionCookie = new ThreadLocal<>();
-	private final CloseableHttpClient httpclient = HttpClients.createDefault();
 	private final ArrayList<String> uniPageIdQueue = new ArrayList<>();
+	private final Map<String, String> uniResourceQueue = new HashMap<>();
 	private final ThreadLocal<Map<String, String>> sessionCookies = new ThreadLocal<Map<String, String>>();
 	
 	/**
@@ -230,6 +225,14 @@ public class ConfluenceSpaceArchiverST {
 			Element iElement = attachmentsA.get(i);
 			String filename = iElement.text();
 			String href = this.ROOT_CONFLUENCE + iElement.attr("href");
+			
+			//从tag判断是不是drawio，这种文件要加后缀名
+			String dataLinkedResourceID = iElement.attr("data-linked-resource-id");
+			Element tag = doc.select("tr#attachment-" + dataLinkedResourceID).first();
+			if (tag.text().contains("drawio")) {
+				filename = filename + ".drawio";
+			}
+			
 			String[] oneAttachment = {filename, href};
 			ret.add(oneAttachment);
 		}
@@ -324,61 +327,107 @@ public class ConfluenceSpaceArchiverST {
 			
 			//下载页面中的css、js、image，并调整doc中的href
 			String postfix = "";// 文件后缀名作为文件前缀
-			int index = 0; // 用于文件名前缀，防止重名文件覆盖
 			Elements importcss = doc.select("link[href]");// 找到document中带有link标签的元素
 			for (Element link : importcss) {
 				postfix = "css";
 				if (link.attr("rel").equals("stylesheet")) {// 如果rel属性为HtmlFileLink
 					String href = link.attr("abs:href");// 得到css样式的href的绝对路径
-					String filename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/elements/" + postfix + index + "." + postfix;
-					link.attr("href", filename);
-					this.downloadFileFromUrl(href, filename);
-					index++;
+					//判断是否属于重复下载的页面css、js等重复的资源文件
+					if (this.uniResourceQueue.containsKey(href)) {
+						String filename = this.uniResourceQueue.get(href);
+						link.attr("href", filename);
+					} else {
+						String filename = this.ROOT_LOCAL_PATH + "/commons/css-" + UUID.randomUUID() + "." + postfix;
+						link.attr("href", filename);
+						this.downloadFileFromUrl(href, filename);
+						this.uniResourceQueue.put(href, filename);
+					}
 				}
 			}
 			Elements media = doc.select("[src]");
 			for (Element link : media) {
-				if (link.tagName().equals("img")) {
+				if (link.tagName().equals("javascript") || link.tagName().equals("script")) {
 					String src = link.attr("abs:src");
 					postfix = this.getPostfix(src);
-					String filename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/elements/" + postfix + index + "." + postfix;
-					link.attr("src", filename);
-					this.downloadFileFromUrl(src, filename);
-					index++;
+					//判断是否属于重复下载的页面css、js等重复的资源文件
+					if (this.uniResourceQueue.containsKey(src)) {
+						String filename = this.uniResourceQueue.get(src);
+						link.attr("src", filename);
+					} else {
+						String filename = this.ROOT_LOCAL_PATH + "/commons/js-" + UUID.randomUUID() + "." + postfix;
+						link.attr("src", filename);
+						this.downloadFileFromUrl(src, filename);
+						this.uniResourceQueue.put(src, filename);
+					}
+				}
+				if (link.tagName().equals("iframe")) {
+					String src = link.attr("abs:src");
+					postfix = this.getPostfix(src);
+					//判断是否属于重复下载的页面css、js等重复的资源文件
+					if (this.uniResourceQueue.containsKey(src)) {
+						String filename = this.uniResourceQueue.get(src);
+						link.attr("src", filename);
+					} else {
+						String filename = this.ROOT_LOCAL_PATH + "/commons/ifr-" + UUID.randomUUID() + "." + postfix;
+						link.attr("src", filename);
+						this.downloadFileFromUrl(src, filename);
+						this.uniResourceQueue.put(src, filename);
+					}
+				}
+				if (link.tagName().equals("embed")) {
+					String src = link.attr("abs:src");
+					postfix = this.getPostfix(src);
+					//判断是否属于重复下载的页面css、js等重复的资源文件
+					if (this.uniResourceQueue.containsKey(src)) {
+						String filename = this.uniResourceQueue.get(src);
+						link.attr("src", filename);
+					} else {
+						String filename = this.ROOT_LOCAL_PATH + "/commons/emb-" + UUID.randomUUID() + "." + postfix;
+						link.attr("src", filename);
+						this.downloadFileFromUrl(src, filename);
+						this.uniResourceQueue.put(src, filename);
+					}
 				}
 				if (link.tagName().equals("input")) {
 					if (link.attr("type").equals("Image")) {
 						String src = link.attr("abs:src");
 						postfix = this.getPostfix(src);
-						String filename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/elements/" + postfix + index + "." + postfix;
-						link.attr("src", filename);
-						this.downloadFileFromUrl(src, filename);
-						index++;
+						//判断是否属于重复下载的页面css、js等重复的资源文件
+						if (this.uniResourceQueue.containsKey(src)) {
+							String filename = this.uniResourceQueue.get(src);
+							link.attr("src", filename);
+						} else {
+							String filename = this.ROOT_LOCAL_PATH + "/commons/inp-" + UUID.randomUUID() + "." + postfix;
+							link.attr("src", filename);
+							this.downloadFileFromUrl(src, filename);
+							this.uniResourceQueue.put(src, filename);
+						}
 					}
 				}
-				if (link.tagName().equals("javascript") || link.tagName().equals("script")) {
+				//图片要特殊处理，排除掉附件，剩下的应该就是不同cdn的公共图片资源
+				if (link.tagName().equals("img")) {
 					String src = link.attr("abs:src");
 					postfix = this.getPostfix(src);
-					String filename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/elements/" + postfix + index + "." + postfix;
-					link.attr("src", filename);
-					this.downloadFileFromUrl(src, filename);
-					index++;
-				}
-				if (link.tagName().equals("iframe")) {
-					String src = link.attr("abs:src");
-					postfix = this.getPostfix(src);
-					String filename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/elements/" + postfix + index + "." + postfix;
-					link.attr("src", filename);
-					this.downloadFileFromUrl(src, filename);
-					index++;
-				}
-				if (link.tagName().equals("embed")) {
-					String src = link.attr("abs:src");
-					postfix = this.getPostfix(src);
-					String filename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/elements/" + postfix + index + "." + postfix;
-					link.attr("src", filename);
-					this.downloadFileFromUrl(src, filename);
-					index++;
+					
+					//附件的引用特殊处理
+					List<String[]> attachmentset = page.getAttachments();
+					boolean containedByAttachments = false;
+					for (String[] attachmentItem : attachmentset) {
+						String fileurl = attachmentItem[1];
+						fileurl = StringUtils.substringBefore(fileurl, "?");
+						String compareSrc = StringUtils.substringBefore(src, "?");
+						if (fileurl.equals(compareSrc)) {
+							containedByAttachments = true;
+							String filename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/attachments/img-" + UUID.randomUUID() + "." + postfix;
+							link.attr("src", filename);
+							break;
+						}
+					}
+					if (!containedByAttachments) {
+						String filename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/elements/img-" + UUID.randomUUID() + "." + postfix;
+						link.attr("src", filename);
+						this.downloadFileFromUrl(src, filename);
+					}
 				}
 			}
 			
@@ -433,6 +482,25 @@ public class ConfluenceSpaceArchiverST {
 				String ahref = attachmentLink.attr("href");
 				ahref = ahref.substring(ahref.indexOf(page.getId()) + page.getId().length() + 1);
 				attachmentLink.attr("href", "attachments/" + ahref);
+			}
+			
+			//下载页面中的drawio要替换成img
+			Elements tagDrawios = doc.select("div[data-macro-name=drawio]");// 找到document中带有link标签的元素
+			for (Element tagDrawio : tagDrawios) {
+				Element script = tagDrawio.children().get(1);
+				String scriptString = script.html();
+				String imgfilename = StringUtils.substringAfter(scriptString, "readerOpts.imageUrl");
+				imgfilename = StringUtils.substringBefore(imgfilename, "readerOpts.editUrl");
+				imgfilename = StringUtils.substringAfter(imgfilename, page.getId());
+				imgfilename = StringUtils.substringBefore(imgfilename, "?");
+				imgfilename = imgfilename.replaceAll("'", "");
+				imgfilename = imgfilename.replaceAll("/", "");
+				imgfilename = imgfilename.replaceAll(" ", "");
+				imgfilename = imgfilename.replaceAll("\\+", "");
+				imgfilename = this.ROOT_LOCAL_PATH + "/page-" + page.getId() + "/attachments/" + imgfilename;
+				
+				tagDrawio.children().remove();
+				tagDrawio.append("<img src=\"" + imgfilename + "\" style=\"width:80%;\"/><br/>");
 			}
 			
 			//保存页面
@@ -502,6 +570,7 @@ public class ConfluenceSpaceArchiverST {
 	}
 	
 	private String getPostfix(String filename) {
+		filename = StringUtils.substringBefore(filename, "?");
 		filename = StringUtils.substringAfterLast(filename, ".");
 		filename = StringUtils.substringBefore(filename, "?");
 		filename = StringUtils.substringBefore(filename, "/");
