@@ -563,7 +563,7 @@ public class ConfluenceSpaceArchiverST {
 			fileOutputStream.close();
 			bufferedInputStream.close();
 			
-			log.info("File downloaded：" + url);
+			log.debug("File downloaded：" + url);
 		} catch (Exception e) {
 			log.error("File download fail：{} {}", url, e.getMessage());
 		}
