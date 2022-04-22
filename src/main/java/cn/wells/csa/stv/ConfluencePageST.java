@@ -1,4 +1,4 @@
-package cn.sunline.wells.toys.csa.stv;
+package cn.wells.csa.stv;
 
 import lombok.Data;
 
