@@ -30,4 +30,8 @@
 
 ## 使用说明
 * 配置数据库，用于保存页面信息，以后再考虑脱离数据库或用h2
-* 
+* 先将application.yml中的配置改下： （是否爬取下级子页面） PROC_SUB_PAGE: true
+（是否下载页面，先爬一个完整的页面树后，再开，可保障目录树的下级是完整的）  PROC_DOWNLOAD_PAGE: false
+  
+* 爬取结构
+* 打开PROC_DOWNLOAD_PAGE: true，正式下载文件、附件
