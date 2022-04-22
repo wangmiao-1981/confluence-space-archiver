@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Loggers>
+        <Root level="INFO">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="LOGFILE"/>
+        </Root>
+    </Loggers>
+
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout
+                    pattern="[%d] %highlight{%-5level}{ERROR=Bright RED, WARN=Bright Yellow, INFO=Bright Green, DEBUG=Bright Cyan, TRACE=Bright White} %style{[%t]}{bright,magenta} [%style{%c{1.}.%M(%L)}{cyan}]: %msg%n"/>
+        </Console>
+
+        <File name="LOGFILE" fileName="./logs/csa-console.log" append="false">
+            <PatternLayout
+                    pattern="[%d] %-5level [%t] [%c{1.}(%L)]: %msg%n"/>
+        </File>
+    </Appenders>
+
+</Configuration>

@@ -1,0 +1,33 @@
+confluence:
+  #登录用户
+  username: wangmiao
+  #登录密码
+  password: openashashami-showmethemoney
+  #登录地址
+  ROOT_CONFLUENCE: http://127.0.0.1:8090
+  #本地保存地址
+  ROOT_LOCAL_PATH: /Users/mmao/mmVolume/Library/Confluence-test
+  #有些地址会在前面加这个开头，这时需要替换过来
+  ROOT_REPLACE_VHOST: "/confluence"
+  #有些文件会用这个域名而不是IP，这时需要替换过来
+  ROOT_ALIAS_ROOT: "http://wells.private.com:8090"
+  #异步线程池大小
+  THREADS: 20
+  #是否爬取下级子页面
+  PROC_SUB_PAGE: true
+  #是否下载页面，先爬一个完整的页面树后，再开，可保障目录树的下级是完整的
+  PROC_DOWNLOAD_PAGE: false
+
+spring:
+  datasource:
+    driver-class-name:
+    url: jdbc:postgresql://127.0.0.1:5432/csa-demo?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8
+    username: csa-demo
+    password: csa-demo
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQL9Dialect
+    database: postgresql
+    hibernate:
+      ddl-auto: update
+    show-sql: false
